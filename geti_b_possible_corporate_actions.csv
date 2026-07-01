@@ -1,0 +1,3 @@
+date,previous_date,previous_close,daily_open,open_gap_pct,reason
+2009-03-24,2009-03-23,92.902602,78.609894,-0.15384615384615385,close_t_minus_1_to_open_t_gap_gt_15pct_possible_unadjusted_corporate_action
+2017-12-07,2017-12-06,147.2,121.0,-0.1779891304347826,close_t_minus_1_to_open_t_gap_gt_15pct_possible_unadjusted_corporate_action
