@@ -38,7 +38,6 @@ class TradeCandidate:
     direction: str
     entry_price: float
     stop_price: float
-    take_profit_price: float
     exit_price: float
     exit_type: str
     entry_bar_time: str
@@ -185,10 +184,13 @@ def make_trade_candidates(
 
         direction = "long" if row.bar1_close > row.bar1_open else "short"
         entry_price = float(row.bar1_high if direction == "long" else row.bar1_low)
+        stop_distance_pct = atr_multiplier * (
+            float(row.atr_14d) / float(row.bar1_close)
+        )
         stop_price = (
-            entry_price - atr_multiplier * float(row.atr_14d)
+            entry_price * (1 - stop_distance_pct)
             if direction == "long"
-            else entry_price + atr_multiplier * float(row.atr_14d)
+            else entry_price * (1 + stop_distance_pct)
         )
 
         candidate = simulate_intraday_trade(
@@ -238,21 +240,13 @@ def simulate_intraday_trade(
     if entry_time == "09:00":
         raise AssertionError(f"{ticker} {date_value.date()}: entry_bar_time == 09:00")
 
-    risk_per_share = abs(entry_price - stop_price)
-    take_profit_price = (
-        entry_price + 2 * risk_per_share
-        if direction == "long"
-        else entry_price - 2 * risk_per_share
-    )
-
     exit_bar = day_df[day_df["bar_time"] == EOD_EXIT_TIME]
     if exit_bar.empty:
         return None
 
     # Exit checks begin on the entry bar itself. This intentionally catches
-    # bars whose high/low range touches entry and an exit level in the same
-    # 5-minute bar. Take profit is checked before stop unless both levels are
-    # touched in the same bar, where the bar direction decides the assumed path.
+    # bars whose high/low range touches entry and the stop in the same
+    # 5-minute bar.
     exit_window = day_df[
         (day_df["datetime"] >= entry_bar["datetime"])
         & (day_df["bar_time"] <= EOD_EXIT_TIME)
@@ -260,48 +254,9 @@ def simulate_intraday_trade(
 
     for bar in exit_window.itertuples(index=False):
         if direction == "long":
-            take_profit_hit = bar.high >= take_profit_price
             stop_hit = bar.low <= stop_price
         else:
-            take_profit_hit = bar.low <= take_profit_price
             stop_hit = bar.high >= stop_price
-
-        if take_profit_hit and stop_hit:
-            bullish_bar = bar.close > bar.open
-            bearish_bar = bar.close < bar.open
-            use_take_profit = (
-                (direction == "long" and bullish_bar)
-                or (direction == "short" and bearish_bar)
-            )
-            if not bullish_bar and not bearish_bar:
-                use_take_profit = False
-
-            return TradeCandidate(
-                date=date_value,
-                ticker=ticker,
-                direction=direction,
-                entry_price=entry_price,
-                stop_price=stop_price,
-                take_profit_price=take_profit_price,
-                exit_price=take_profit_price if use_take_profit else stop_price,
-                exit_type="take_profit" if use_take_profit else "stop",
-                entry_bar_time=entry_time,
-                atr_multiplier=atr_multiplier,
-            )
-
-        if take_profit_hit:
-            return TradeCandidate(
-                date=date_value,
-                ticker=ticker,
-                direction=direction,
-                entry_price=entry_price,
-                stop_price=stop_price,
-                take_profit_price=take_profit_price,
-                exit_price=take_profit_price,
-                exit_type="take_profit",
-                entry_bar_time=entry_time,
-                atr_multiplier=atr_multiplier,
-            )
 
         if stop_hit:
             return TradeCandidate(
@@ -310,7 +265,6 @@ def simulate_intraday_trade(
                 direction=direction,
                 entry_price=entry_price,
                 stop_price=stop_price,
-                take_profit_price=take_profit_price,
                 exit_price=stop_price,
                 exit_type="stop",
                 entry_bar_time=entry_time,
@@ -323,7 +277,6 @@ def simulate_intraday_trade(
         direction=direction,
         entry_price=entry_price,
         stop_price=stop_price,
-        take_profit_price=take_profit_price,
         exit_price=float(exit_bar.iloc[0]["close"]),
         exit_type="eod",
         entry_bar_time=entry_time,
@@ -360,7 +313,6 @@ def price_trade(candidate: TradeCandidate, capital: float) -> dict[str, object]:
         "direction": candidate.direction,
         "entry_price": candidate.entry_price,
         "stop_price": candidate.stop_price,
-        "take_profit_price": candidate.take_profit_price,
         "exit_price": candidate.exit_price,
         "exit_type": candidate.exit_type,
         "atr_multiplier": candidate.atr_multiplier,
@@ -483,7 +435,6 @@ def calculate_summary_stats(
         return {
             "total_trades": 0,
             "stop_rate": 0.0,
-            "take_profit_rate": 0.0,
             "eod_rate": 0.0,
             "hit_rate": 0.0,
             "avg_net_pnl": 0.0,
@@ -508,7 +459,6 @@ def calculate_summary_stats(
     return {
         "total_trades": total_trades,
         "stop_rate": float((trades["exit_type"] == "stop").mean()),
-        "take_profit_rate": float((trades["exit_type"] == "take_profit").mean()),
         "eod_rate": float((trades["exit_type"] == "eod").mean()),
         "hit_rate": float((trades["net_pnl"] > 0).mean()),
         "avg_net_pnl": float(trades["net_pnl"].mean()),
@@ -547,7 +497,6 @@ def main() -> None:
     print("\nBacktest complete")
     print(f"Totalt antal trades: {stats['total_trades']}")
     print(f"Stop rate: {stats['stop_rate']:.2%}")
-    print(f"Take profit rate: {stats['take_profit_rate']:.2%}")
     print(f"EOD rate: {stats['eod_rate']:.2%}")
     print(f"Hit rate: {stats['hit_rate']:.2%}")
     print(f"Genomsnittlig net_pnl per trade: {stats['avg_net_pnl']:.2f}")
