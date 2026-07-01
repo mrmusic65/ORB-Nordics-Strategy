@@ -33,11 +33,11 @@ exit /b 0
 set "PERIOD_START=%~1"
 set "PERIOD_END=%~2"
 
-for %%M in (0.5 1.0 1.5) do (
-    echo Running ATR %%M from %PERIOD_START% to %PERIOD_END%
-    py "%SCRIPT_DIR%orb_backtest.py" "%FEATURE_DIR%" "%INTRADAY_DIR%" %%M %PERIOD_START% %PERIOD_END%
+for %%V in (1.0 2.0 3.0 5.0) do (
+    echo Running ATR 1.5 with min_rel_vol %%V from %PERIOD_START% to %PERIOD_END%
+    py "%SCRIPT_DIR%orb_backtest.py" "%FEATURE_DIR%" "%INTRADAY_DIR%" 1.5 %PERIOD_START% %PERIOD_END% --min_rel_vol %%V
     if errorlevel 1 (
-        echo Walk-forward run failed: ATR %%M from %PERIOD_START% to %PERIOD_END%
+        echo Walk-forward run failed: ATR 1.5, min_rel_vol %%V from %PERIOD_START% to %PERIOD_END%
         exit /b 1
     )
 )

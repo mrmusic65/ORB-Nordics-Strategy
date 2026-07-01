@@ -66,6 +66,12 @@ def parse_args() -> argparse.Namespace:
         help="ATR stop multiplier. Default: 1.0.",
     )
     parser.add_argument(
+        "--min_rel_vol",
+        type=float,
+        default=1.0,
+        help="Minimum relative volume required for a trade. Default: 1.0.",
+    )
+    parser.add_argument(
         "train_start",
         nargs="?",
         default=None,
@@ -162,6 +168,7 @@ def make_trade_candidates(
     features: pd.DataFrame,
     intraday: pd.DataFrame,
     atr_multiplier: float,
+    min_rel_vol: float,
 ) -> list[TradeCandidate]:
     candidates: list[TradeCandidate] = []
     intraday_by_date = {
@@ -172,7 +179,7 @@ def make_trade_candidates(
     for row in features.sort_values("date").itertuples(index=False):
         if pd.isna(row.atr_14d) or pd.isna(row.relative_volume):
             continue
-        if row.relative_volume <= 1.0:
+        if row.relative_volume <= min_rel_vol:
             continue
         if row.bar1_close == row.bar1_open:
             continue
@@ -331,6 +338,7 @@ def run_backtest(
     atr_multiplier: float,
     train_start: str | None = None,
     train_end: str | None = None,
+    min_rel_vol: float = 1.0,
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, float], Path, Path]:
     period_start, period_end, period_start_label, period_end_label = parse_period(
         train_start, train_end
@@ -353,7 +361,7 @@ def run_backtest(
         features = filter_features_by_period(features, period_start, period_end)
         intraday = prepare_intraday(intraday_path)
         ticker_candidates = make_trade_candidates(
-            ticker, features, intraday, atr_multiplier
+            ticker, features, intraday, atr_multiplier, min_rel_vol
         )
         candidates.extend(ticker_candidates)
         print(f"{ticker}: {len(ticker_candidates)} trade candidates")
@@ -493,6 +501,7 @@ def main() -> None:
         args.atr_multiplier,
         args.train_start,
         args.train_end,
+        args.min_rel_vol,
     )
     print("\nBacktest complete")
     print(f"Totalt antal trades: {stats['total_trades']}")
